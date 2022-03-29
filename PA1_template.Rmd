@@ -1,25 +1,131 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Reproducible Research: Assignment 1"
+output: html_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Reproducible Research: Assignment 1
 
 ## Loading and preprocessing the data
 
-
+```{r loaddata}
+unzip(zipfile="activity.zip")
+data <- read.csv("activity.csv", header=TRUE)
+```
 
 ## What is mean total number of steps taken per day?
 
-
+```{r}
+library(magrittr)
+library(dplyr)
+total.steps <- tapply(data$steps, data$date, FUN=sum, na.rm=TRUE)
+hist(total.steps, xlab = "Total daily Steps",main="Histogram of Total Steps by Day", col="steelblue", breaks = 20)
+meanPreNA<-mean(total.steps, na.rm=TRUE)
+meanPreNA
+medianPreNA<-median(total.steps, na.rm=TRUE)
+medianPreNA
+```
 
 ## What is the average daily activity pattern?
 
+```{r}
+stepsPerInterval <- data %>%
+        group_by(interval) %>%
+        summarize(meansteps = mean(steps, na.rm = TRUE)) 
 
+plot(stepsPerInterval$meansteps ~ stepsPerInterval$interval,
+     col="steelblue", type="l", xlab = "5 Minute Intervals", ylab = "Average Number of Steps",
+     main = "Steps By Time Interval")
+```
+
+On average across all the days in the dataset, the 5-minute interval contains the maximum number of steps?
+
+```{r}
+print(paste("Interval containing the most steps on average: ",stepsPerInterval$interval[which.max(stepsPerInterval$meansteps)]))
+```
 
 ## Imputing missing values
 
+There are many days/intervals where there are missing values (coded as `NA`). The presence of missing days may introduce bias into some calculations or summaries of the data.
 
+```{r how_many_missing}
+missing <- is.na(data$steps)
+# How many missing
+table(missing)
+```
+
+All of the missing values are filled in with mean value for that 5-minute interval.
+
+```{r}
+#Before 
+#Display first 10 rows of data
+head(data,10)
+```
+
+```{r}
+activityNoNA <- data  
+for (i in 1:nrow(data)){
+        if(is.na(data$steps[i])){
+                activityNoNA$steps[i]<- stepsPerInterval$meansteps[activityNoNA$interval[i] == stepsPerInterval$interval]
+        }
+}
+
+#After
+#Display first 10 rows of data
+head(activityNoNA,10)
+```
+
+Now, using the filled data set, let's make a histogram of the total number of steps taken each day and calculate the mean and median total number of steps.
+
+```{r}
+stepsPerDay <- activityNoNA %>%
+        group_by(date) %>%
+        summarize(sumsteps = sum(steps, na.rm = TRUE)) 
+
+hist(stepsPerDay$sumsteps, main = "Histogram of Daily Steps", 
+     col="steelblue", xlab="Steps")
+```
+
+```{r}
+meanPostNA <- round(mean(stepsPerDay$sumsteps), digits = 2)
+medianPostNA <- round(median(stepsPerDay$sumsteps), digits = 2)
+
+```
+
+Once the logic is applied to imput missing values, it allows for all records to be included increasing both the mean and median. The mean increases from 9354.23 to 10766.19. It is important to note that NA values in the first part of the project were ignored (na.rm = TRUE). Once averages were applied to the missing values the overall mean increased.
+
+```{r}
+NACompare <- data.frame(mean = c(meanPreNA,meanPostNA),median = c(medianPreNA,medianPostNA))
+rownames(NACompare) <- c("Pre NA Transformation", "Post NA Transformation")
+print(NACompare)
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+First, let's find the day of the week for each measurement in the dataset. In this part, we use the dataset with the filled-in values.
+
+```{r}
+weekday.or.weekend <- function(date) {
+    day <- weekdays(date)
+    if (day %in% c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"))
+        return("weekday")
+    else if (day %in% c("Saturday", "Sunday"))
+        return("weekend")
+    else
+        stop("invalid date")
+}
+activityNoNA$date <- as.Date(activityNoNA$date)
+activityNoNA$day <- sapply(activityNoNA$date, FUN=weekday.or.weekend)
+```
+
+Now, let's make a panel plot containing plots of average number of steps taken on weekdays and weekends.
+
+```{r}
+library(ggplot2)
+averages <- aggregate(steps ~ interval + day, data=activityNoNA, mean)
+ggplot(averages, aes(interval, steps)) + geom_line(color="steelblue") + facet_grid(day ~ .) +
+    xlab("5-minute interval") + ylab("Number of steps")
+```
